@@ -1,7 +1,7 @@
 package GCache
 
 import (
-	"GCache/cache"
+	"github.com/titus12/gcache/cache"
 	"time"
 )
 
