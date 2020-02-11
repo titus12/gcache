@@ -13,7 +13,7 @@ type Config struct {
 	// Number of cache shards, value must be a power of two
 	Shards int
 	// Time after which entry can be evicted
-	defaultExpiration time.Duration
+	Expiration time.Duration
 	// Interval between removing expired entries (clean up).
 	// If set to <= 0 then no action is performed. Setting to < 1 second is counterproductive — gcache has a one second resolution.
 	CleanInterval time.Duration
@@ -38,13 +38,13 @@ type Config struct {
 // When load for BigCache can be predicted in advance then it is better to use custom config.
 func DefaultConfig(eviction time.Duration) Config {
 	return Config{
-		Shards:            1024,
-		defaultExpiration: eviction,
-		EvictType:         cache.TYPE_LRU,
-		CleanInterval:     180 * time.Second,
-		MaxEntrySize:      500,
-		Hasher:            newDefaultHasher(),
-		Logger:            DefaultLogger(),
+		Shards:        1024,
+		Expiration:    eviction,
+		EvictType:     cache.TYPE_LRU,
+		CleanInterval: 180 * time.Second,
+		MaxEntrySize:  1024 * 1024,
+		Hasher:        newDefaultHasher(),
+		Logger:        DefaultLogger(),
 	}
 }
 

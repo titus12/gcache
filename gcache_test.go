@@ -20,13 +20,13 @@ func Test_newGCache(t *testing.T) {
 		fmt.Printf("evict key:%v,reason %v \n", key, reason)
 	}
 	c := Config{
-		Shards:            1,
-		defaultExpiration: 200 * time.Second,
-		CleanInterval:     300 * time.Second,
-		MaxEntrySize:      0,
-		EvictType:         cache.TYPE_LRU,
-		Hasher:            newDefaultHasher(),
-		OnRemoveFunc:      f,
+		Shards:        1,
+		Expiration:    200 * time.Second,
+		CleanInterval: 300 * time.Second,
+		MaxEntrySize:  0,
+		EvictType:     cache.TYPE_LRU,
+		Hasher:        newDefaultHasher(),
+		OnRemoveFunc:  f,
 		//Logger:            DefaultLogger(),
 		Logger: log.New(os.Stdout, "", log.LstdFlags),
 	}

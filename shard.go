@@ -21,7 +21,7 @@ func initNewShard(config Config, clock clock) *cacheShard {
 	//case TYPE_SIMPLE:
 	//newSimpleCache(cb)
 	case cache.TYPE_LRU:
-		c = cache.NewLRUCache(size, config.defaultExpiration, config.OnRemoveFunc)
+		c = cache.NewLRUCache(size, config.Expiration, config.OnRemoveFunc)
 	case cache.TYPE_LFU:
 		//newLFUCache(cb)
 		fallthrough
@@ -37,7 +37,7 @@ func initNewShard(config Config, clock clock) *cacheShard {
 		onRemove:   config.OnRemoveFunc,
 		logger:     newLogger(config.Logger),
 		clock:      clock,
-		expiration: uint64(config.defaultExpiration.Seconds()),
+		expiration: uint64(config.Expiration.Seconds()),
 	}
 
 	return shard
