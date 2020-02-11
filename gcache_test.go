@@ -1,8 +1,8 @@
 package GCache
 
 import (
-	"GCache/cache"
 	"fmt"
+	"github.com/titus12/gcache/cache"
 	"log"
 	"os"
 	"testing"
@@ -25,7 +25,7 @@ func Test_newGCache(t *testing.T) {
 		CleanInterval:     300 * time.Second,
 		MaxEntrySize:      0,
 		EvictType:         cache.TYPE_LRU,
-		Hasher:            newDefaultHasher(),
+		Hasher:            NewDefaultHasher(),
 		OnRemoveFunc:      f,
 		//Logger:            DefaultLogger(),
 		Logger: log.New(os.Stdout, "", log.LstdFlags),
