@@ -25,7 +25,7 @@ func Test_newGCache(t *testing.T) {
 		CleanInterval:     300 * time.Second,
 		MaxEntrySize:      0,
 		EvictType:         cache.TYPE_LRU,
-		Hasher:            NewDefaultHasher(),
+		Hasher:            newDefaultHasher(),
 		OnRemoveFunc:      f,
 		//Logger:            DefaultLogger(),
 		Logger: log.New(os.Stdout, "", log.LstdFlags),
