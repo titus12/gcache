@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	minimumEntriesInShard = 1 // Minimum number of entries in single shard
+	minimumEntriesInShard = 10 // Minimum number of entries in single shard
 )
 
 type Config struct {

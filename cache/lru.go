@@ -52,8 +52,9 @@ func (c *LRUCache) Add(key interface{}, value interface{}) bool {
 	now := uint64(time.Now().Unix())
 	if ee, ok := c.items[key]; ok {
 		c.ll.MoveToFront(ee)
-		ee.Value.(*entry).value = value
-		ee.Value.(*entry).timestamp = now
+		kv := ee.Value.(*entry)
+		kv.value = value
+		atomic.StoreUint64(&kv.timestamp, now)
 		return true
 	}
 	ele := c.ll.PushFront(&entry{key, value, now})
@@ -71,7 +72,8 @@ func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool) {
 	}
 	if ele, hit := c.items[key]; hit {
 		now := uint64(time.Now().Unix())
-		if c.expiration > 0 && now-ele.Value.(*entry).timestamp > c.expiration {
+		lastAt := atomic.LoadUint64(&ele.Value.(*entry).timestamp)
+		if c.expiration > 0 && now-lastAt > c.expiration {
 			return nil, false
 		}
 		kv := ele.Value.(*entry)
@@ -128,7 +130,8 @@ func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool) {
 	var ent *list.Element
 	if ent, ok = c.items[key]; ok {
 		now := uint64(time.Now().Unix())
-		if c.expiration > 0 && now-ent.Value.(*entry).timestamp > c.expiration {
+		lastAt := atomic.LoadUint64(&ent.Value.(*entry).timestamp)
+		if c.expiration > 0 && now-lastAt > c.expiration {
 			return nil, false
 		}
 		return ent.Value.(*entry).value, true
@@ -142,7 +145,8 @@ func (c *LRUCache) Contains(key interface{}) bool {
 	ele, ok := c.items[key]
 	if ok {
 		now := uint64(time.Now().Unix())
-		if c.expiration > 0 && now-ele.Value.(*entry).timestamp > c.expiration {
+		lastAt := atomic.LoadUint64(&ele.Value.(*entry).timestamp)
+		if c.expiration > 0 && now-lastAt > c.expiration {
 			return false
 		}
 	}
@@ -154,7 +158,8 @@ func (c *LRUCache) CleanUp(currentTimestamp uint64) {
 		return
 	}
 	for _, e := range c.items {
-		if currentTimestamp-e.Value.(*entry).timestamp > c.expiration {
+		lastAt := atomic.LoadUint64(&e.Value.(*entry).timestamp)
+		if currentTimestamp-lastAt > c.expiration {
 			c.removeElement(e, Expired)
 		}
 	}
