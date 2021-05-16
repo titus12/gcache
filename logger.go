@@ -1,30 +1,57 @@
-package GCache
+package gcache
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
 
-// Logger is invoked when `Config.Verbose=true`
 type Logger interface {
-	Printf(format string, v ...interface{})
+	Debugf(format string, v ...interface{})
+	Infof(format string, v ...interface{})
+	Warnf(format string, v ...interface{})
+	Errorf(format string, v ...interface{})
+	Fatalf(format string, v ...interface{})
 }
 
-// this is a safeguard, breaking on compile time in case
-// `log.Logger` does not adhere to our `Logger` interface.
-// see https://golang.org/doc/faq#guarantee_satisfies_interface
-var _ Logger = &log.Logger{}
+var l Logger = &dl{log.New(os.Stdout, "", log.LstdFlags|log.Lshortfile)}
 
-// DefaultLogger returns a `Logger` implementation
-// backed by stdlib's log
-func DefaultLogger() *log.Logger {
-	return log.New(os.Stdout, "", log.LstdFlags)
+type dl struct {
+	*log.Logger
 }
 
-func newLogger(custom Logger) Logger {
-	if custom != nil {
-		return custom
+const (
+	callDepth = 3
+)
+
+func prefix(lvl, msg string) string {
+	return fmt.Sprintf("%s: %s", lvl, msg)
+}
+
+func (d *dl) Debugf(f string, v ...interface{}) {
+	d.Output(callDepth, prefix("DEBUG", fmt.Sprintf(f, v...)))
+}
+func (d *dl) Infof(format string, v ...interface{}) {
+	d.Output(callDepth, prefix("INFO ", fmt.Sprintf(format, v...)))
+}
+func (d *dl) Warnf(format string, v ...interface{}) {
+	d.Output(callDepth, prefix("WARN ", fmt.Sprintf(format, v...)))
+}
+func (d *dl) Errorf(format string, v ...interface{}) {
+	d.Output(callDepth, prefix("ERROR", fmt.Sprintf(format, v...)))
+}
+func (d *dl) Fatalf(format string, v ...interface{}) {
+	d.Output(callDepth, prefix("FATAL", fmt.Sprintf(format, v...)))
+	os.Exit(1)
+}
+
+func setLogger(logger Logger) {
+	if logger == nil {
+		return
 	}
+	l = logger
+}
 
-	return DefaultLogger()
+func L() Logger {
+	return l
 }

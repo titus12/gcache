@@ -1,6 +1,8 @@
-package GCache
+package gcache
 
 import (
+	"bitbucket.org/funplus/gcache/cache"
+	"bitbucket.org/funplus/gcache/cache/LRU"
 	"fmt"
 	"time"
 )
@@ -11,53 +13,57 @@ const (
 	// For use with functions that take an expiration time. Equivalent to
 	// passing in the same expiration duration as was given to New() or
 	// NewFrom() when the cache was created (e.g. 5 minutes.)
-	DefaultExpiration time.Duration = 5 * 60
+	DefaultExpiration time.Duration = 5 * time.Minute
 )
 
+const default_evict_strategy = LRU.Name
+
 type GCache struct {
-	shards       []*cacheShard
-	clock        clock
-	hash         Hasher
-	config       Config
-	shardMask    uint64
-	maxShardSize uint32
-	close        chan struct{}
+	name      string
+	shards    []*cacheShard
+	cc        *Options
+	shardMask uint64
+	close     chan struct{}
 }
 
-func NewGCache(config Config) (*GCache, error) {
-	return newGCache(config, &systemClock{})
-}
-
-func newGCache(config Config, clock clock) (*GCache, error) {
-	if !isPowerOfTwo(config.Shards) {
-		return nil, fmt.Errorf("Shards number must be power of two")
-	}
-
-	if config.Hasher == nil {
-		config.Hasher = newDefaultHasher()
-	}
-
-	gcache := &GCache{
-		shards:    make([]*cacheShard, config.Shards),
-		clock:     clock,
-		hash:      config.Hasher,
-		config:    config,
-		shardMask: uint64(config.Shards - 1),
-		close:     make(chan struct{}),
-	}
-
-	for i := 0; i < config.Shards; i++ {
-		gcache.shards[i] = initNewShard(config, clock)
-	}
-
-	if config.CleanInterval > 0 {
+func (g *GCache) evictCallback(key interface{}, value interface{}, reason cache.RemoveReason) {
+	l.Debugf("cache %s: key %v is evicted, value %v, reason %v", g.name, key, value, reason)
+	if g.cc.OnRemoveCallbackFunc != nil {
 		go func() {
-			ticker := time.NewTicker(config.CleanInterval)
+			defer PrintPanicStack()
+			g.cc.OnRemoveCallbackFunc(key, value, reason)
+		}()
+	}
+}
+
+func NewGCache(name string, opts ...Option) (*GCache, error) {
+	gcache := &GCache{name: name}
+	gcache.cc = NewOptions(opts...)
+	gcache.shards = make([]*cacheShard, gcache.cc.Shards)
+	gcache.shardMask = uint64(gcache.cc.Shards - 1)
+	gcache.close = make(chan struct{})
+	setLogger(gcache.cc.Logger)
+	if !isPowerOfTwo(int(gcache.cc.Shards)) {
+		return nil, fmt.Errorf("Shards number: %d must be power of two", gcache.cc.Shards)
+	}
+
+	for i := 0; i < int(gcache.cc.Shards); i++ {
+		shard, err := initNewShard(gcache)
+		if err != nil {
+			return nil, err
+		}
+		gcache.shards[i] = shard
+	}
+
+	if gcache.cc.CleanInterval > 0 && gcache.cc.Expiration > 0 {
+		go func() {
+			defer PrintPanicStack()
+			ticker := time.NewTicker(gcache.cc.CleanInterval)
 			defer ticker.Stop()
 			for {
 				select {
 				case t := <-ticker.C:
-					gcache.cleanUp(uint64(t.Unix()))
+					gcache.cleanUp(t.Unix())
 				case <-gcache.close:
 					return
 				}
@@ -68,45 +74,56 @@ func newGCache(config Config, clock clock) (*GCache, error) {
 	return gcache, nil
 }
 
-func (c *GCache) Set(key string, entity interface{}) bool {
-	hashedKey := c.hash.Sum64(key)
-	shard := c.getShard(hashedKey)
-	return shard.set(key, entity)
+func (c *GCache) getShard(key interface{}) (shard *cacheShard) {
+	hashedKey := c.cc.Hasher.Sum64(key)
+	return c.shards[hashedKey&c.shardMask]
 }
 
-/*func (c *GCache) SetWithTTL(key string, entity interface{},) bool {
-
-}*/
-
-func (c *GCache) getShard(hashedKey uint64) (shard *cacheShard) {
-	return c.shards[hashedKey&c.shardMask]
+func (c *GCache) Set(key interface{}, entity interface{}) bool {
+	shard := c.getShard(key)
+	return shard.set(key, entity)
 }
 
 // Get reads entry for the key.
 // It returns an ErrEntryNotFound when
 // no entry exists for the given key.
-func (c *GCache) Get(key string) (interface{}, bool) {
-	hashedKey := c.hash.Sum64(key)
-	shard := c.getShard(hashedKey)
+func (c *GCache) Get(key interface{}) (interface{}, bool) {
+	shard := c.getShard(key)
 	return shard.get(key)
 }
 
+func (c *GCache) Count() int {
+	count := 0
+	for _, shard := range c.shards {
+		count += shard.count()
+	}
+	return count
+}
+
+func (c *GCache) LoadOrStore(key interface{}, entity interface{}) (interface{}, bool) {
+	shard := c.getShard(key)
+	return shard.loadOrStore(key, entity)
+}
+
+func (c *GCache) CompareAndSet(key interface{}, expect, update interface{}, equal func(old, new interface{}) bool) (interface{}, bool) {
+	shard := c.getShard(key)
+	return shard.compareAndSet(key, expect, update, equal)
+}
+
 // Delete removes the key
-func (c *GCache) Delete(key string) bool {
-	hashedKey := c.hash.Sum64(key)
-	shard := c.getShard(hashedKey)
+func (c *GCache) Delete(key interface{}) bool {
+	shard := c.getShard(key)
 	return shard.remove(key)
 }
 
 //Contains contains the key
-func (c *GCache) Contains(key string) bool {
-	hashedKey := c.hash.Sum64(key)
-	shard := c.getShard(hashedKey)
+func (c *GCache) Contains(key interface{}) bool {
+	shard := c.getShard(key)
 	return shard.contains(key)
 }
 
 // clean up keys expired
-func (c *GCache) cleanUp(currentTimestamp uint64) {
+func (c *GCache) cleanUp(currentTimestamp int64) {
 	for _, shard := range c.shards {
 		shard.cleanUp(currentTimestamp)
 	}
